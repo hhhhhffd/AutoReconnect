@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.autoreconnect.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": ["ConnectScreenMixin", "ClientPacketListenerMixin", "MinecraftMixin", "DisconnectedScreenMixin"],
+  "injectors": { "defaultRequire": 1 }
+}
