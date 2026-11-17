@@ -5,6 +5,8 @@
   "name": "Auto Reconnect",
   "description": "Reconnect to the last Minecraft server from the disconnect screen.",
   "environment": "client",
+  "entrypoints": { "modmenu": ["com.autoreconnect.ModMenuIntegration"] },
+  "suggests": { "modmenu": ">=17.0.0" },
   "mixins": ["autoreconnect.client.mixins.json"],
   "depends": {
     "fabricloader": ">=0.18.4",

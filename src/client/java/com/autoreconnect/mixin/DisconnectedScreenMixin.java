@@ -3,8 +3,6 @@ package com.autoreconnect.mixin;
 import com.autoreconnect.Reconnect;
 import com.autoreconnect.RetryPolicy;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.DisconnectedScreen;
@@ -26,66 +24,42 @@ abstract class DisconnectedScreenMixin extends Screen {
     @Shadow @Final private LinearLayout layout;
 
     @Unique private Button autoreconnect$autoButton;
-    @Unique private Button autoreconnect$applyDelay;
-    @Unique private EditBox autoreconnect$delayField;
     @Unique private RetryPolicy.Cause autoreconnect$cause = RetryPolicy.Cause.MANUAL_ONLY;
     @Unique private long autoreconnect$due = Long.MIN_VALUE;
 
     protected DisconnectedScreenMixin(Component title) { super(title); }
 
     @Inject(method = "init", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/Minecraft;allowsMultiplayer()Z"))
+            target = "Lnet/minecraft/client/gui/layouts/LinearLayout;arrangeElements()V"))
     private void autoreconnect$addControls(CallbackInfo ci) {
         if (!Reconnect.hasServer() || minecraft == null || !minecraft.allowsMultiplayer()) return;
+
+        // At this point vanilla has placed Back after any optional report controls,
+        // but has not performed layout or registered the widgets yet.
+        Button[] back = {null};
+        layout.visitWidgets(widget -> {
+            if (widget instanceof Button button) back[0] = button;
+        });
+        if (back[0] == null) return;
+        int buttonWidth = back[0].getWidth();
+        int buttonHeight = back[0].getHeight();
 
         Reconnect.POLICY.disconnected(Reconnect.now());
         autoreconnect$cause = Reconnect.classify(details.reason(), details.report().isPresent());
 
-        LinearLayout row = LinearLayout.horizontal().spacing(4);
-        row.addChild(Button.builder(Component.literal("Reconnect"), button -> {
+        layout.addChild(Button.builder(Component.literal("Reconnect"), button -> {
             autoreconnect$due = Long.MIN_VALUE;
             Reconnect.connect(minecraft, parent, false);
-        }).width(98).tooltip(Tooltip.create(Component.literal("Reconnect to the same server now."))).build());
+        }).size(buttonWidth, buttonHeight)
+          .tooltip(Tooltip.create(Component.literal("Reconnect to the same server now."))).build());
 
-        autoreconnect$autoButton = row.addChild(Button.builder(Component.empty(), button -> {
+        autoreconnect$autoButton = layout.addChild(Button.builder(Component.empty(), button -> {
             Reconnect.config().setEnabled(!Reconnect.config().enabled());
             autoreconnect$schedule();
-        }).width(98).tooltip(Tooltip.create(Component.literal("Toggle automatic reconnect. Turning it off cancels the timer."))).build());
+        }).size(buttonWidth, buttonHeight)
+          .tooltip(Tooltip.create(Component.literal("Toggle automatic reconnect. Turning it off cancels the timer."))).build());
 
-        layout.addChild(row);
-        LinearLayout delayRow = LinearLayout.horizontal().spacing(4);
-        autoreconnect$delayField = new EditBox(font, 0, 0, 84, 20, null, Component.literal("Reconnect delay in seconds"));
-        autoreconnect$delayField.setMaxLength(10);
-        autoreconnect$delayField.setFilter(value -> value.chars().allMatch(ch -> ch >= '0' && ch <= '9'));
-        autoreconnect$delayField.setHint(Component.literal("Seconds"));
-        autoreconnect$delayField.setValue(Integer.toString(Reconnect.config().delay()));
-        delayRow.addChild(autoreconnect$delayField);
-        autoreconnect$applyDelay = delayRow.addChild(Button.builder(Component.literal("Set delay (s)"),
-                button -> autoreconnect$applyDelay()).width(112)
-                .tooltip(Tooltip.create(Component.literal("First retry delay: 3 to 2147483647 seconds."))).build());
-        autoreconnect$delayField.setResponder(value -> autoreconnect$applyDelay.active = !value.isEmpty());
-        layout.addChild(delayRow);
         autoreconnect$schedule();
-    }
-
-    @Unique private void autoreconnect$applyDelay() {
-        String value = autoreconnect$delayField.getValue();
-        if (value.isEmpty()) return;
-        int seconds = RetryPolicy.clampDelay(Long.parseLong(value));
-        autoreconnect$delayField.setValue(Integer.toString(seconds));
-        boolean changed = Reconnect.config().delay() != seconds;
-        Reconnect.config().setDelay(seconds);
-        Reconnect.config().save();
-        if (changed && autoreconnect$due != Long.MIN_VALUE) autoreconnect$schedule();
-    }
-
-    @Override public boolean keyPressed(KeyEvent event) {
-        int key = event.key();
-        if (autoreconnect$delayField != null && autoreconnect$delayField.isFocused() && (key == 257 || key == 335)) {
-            autoreconnect$applyDelay();
-            return true;
-        }
-        return super.keyPressed(event);
     }
 
     @Unique private void autoreconnect$schedule() {
@@ -99,12 +73,12 @@ abstract class DisconnectedScreenMixin extends Screen {
         if (autoreconnect$autoButton == null) return;
         String label;
         if (!Reconnect.config().enabled()) {
-            label = "Auto: OFF";
+            label = "Auto Reconnect: OFF";
         } else if (autoreconnect$due == Long.MIN_VALUE) {
-            label = "Auto: ON";
+            label = "Auto Reconnect: ON";
         } else {
             long seconds = Math.max(0L, (autoreconnect$due - now + 999L) / 1000L);
-            label = seconds < 10_000 ? "Auto: ON (" + seconds + "s)" : "Auto: " + seconds + "s";
+            label = "Auto Reconnect: ON (" + seconds + "s)";
         }
         if (!autoreconnect$autoButton.getMessage().getString().equals(label)) {
             autoreconnect$autoButton.setMessage(Component.literal(label));
@@ -129,6 +103,5 @@ abstract class DisconnectedScreenMixin extends Screen {
     @Override public void removed() {
         super.removed();
         autoreconnect$due = Long.MIN_VALUE;
-        if (autoreconnect$autoButton != null) Reconnect.config().save();
     }
 }
